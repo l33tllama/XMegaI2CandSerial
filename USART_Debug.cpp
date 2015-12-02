@@ -1,4 +1,6 @@
 #include "USART_Debug.h"
+#include <stdio.h>
+#include <avr/io.h>
 extern "C"{
 
 	FILE * usart_str;

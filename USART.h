@@ -7,6 +7,7 @@
 
 #ifndef USART_H_
 #define USART_H_
+#define F_CPU 3200000
 #include <stdio.h>
 #include <avr/io.h>
 

@@ -7,7 +7,7 @@
 
 #ifndef TWI_H_
 #define TWI_H_
-
+#define F_CPU 3200000
 #include <avr/io.h>
 
 /*! Transaction result enumeration. */
@@ -23,13 +23,15 @@ typedef enum TWIM_RESULT_enum {
 
 typedef enum TWIM_STATUS_enum {
 	TWIM_STATUS_BUSY = (0x00<<0),
-	TWIM_STATUS_READY = (0x01<<0)
+	TWIM_STATUS_READY = (0x01<<0),
+	TWIM_STATUS_BEGIN_WRITE = (0x02<<0),
+	TWIM_STATUS_BEGIN_READ = (0x00<<0)
 } TWIM_STATUS_t;
 
 typedef struct TWI_Data_struct{
 	TWI_t * twi_port;
 	PORT_t * port;
-	uint8_t baud_khz;
+	unsigned int baud_hz;
 	uint8_t maxDataLength;
 	register8_t master_addr;
 	register8_t result;
@@ -38,14 +40,26 @@ typedef struct TWI_Data_struct{
 
 class TWI {
 private:
-	inline register8_t getBaudVal(int baud);
+	register8_t getBaudVal(int baud);
 	TWI_Data * twi_data;
+	TWI_t * twi_port;
+	PORT_t * port;
+	TWIM_STATUS_t twim_status;
+	void checkTWIStatus();
+	register8_t returnAddresses[127];
 public:
 	TWI(TWI_Data * twi_data);
-	void writeData(register8_t address, const char * data);
+	void beginWrite(register8_t address);
+	void beginRead(register8_t address);
+	void putChar(char c);
+	char getChar();
+	void endTransmission();
+	void writeData(register8_t address, const char * data, int length);
 	char * readData(register8_t address);
+	void begin(register8_t);
+	void end();
 	void setDataLength(uint8_t length);
-	int * pollBus();
+	register8_t * pollBus();
 
 	virtual ~TWI();
 };
