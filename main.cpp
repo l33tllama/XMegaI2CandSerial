@@ -124,9 +124,7 @@ int main(){
 
 	//char tmp[80];
 	printf("Hello world\n");
-	//scanf("%s", tmp);
-	//printf("Hi %s!\n", tmp);
-	//rtc.begin();
+
 	printf("Polling I2C bus...");
 	register8_t * i2cAddresses;
 	i2cAddresses = leds.pollBus();
@@ -154,7 +152,7 @@ int main(){
 	printf("Turning on led matrix osc.\n");	
 	// turn on oscillator
 	
-	leds.beginWrite(leds_addr);	
+	leds.beginWrite(leds_addr);
 	printf("Write begun..");
 	leds.putChar(0x21);
 	printf("Wrote a char");
@@ -179,7 +177,7 @@ int main(){
 	while(true){
 		for (uint8_t i=0; i<8; i++) {
 			// draw a diagonal row of pixels
-			displaybuffer[i] = 1 << ((counter+i) % 16) | 1 << ((counter+i+8) % 16)  ;
+			displaybuffer[i] = 1 << ((counter+i) % 16) | 1 << ((counter+i+8) % 16) ;
 			//printf("%d\n", displaybuffer[i]);
 		}
 		//test write

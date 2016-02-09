@@ -13,9 +13,8 @@
 #include <util/delay.h>
 #include <avr/io.h>
 
+// life saving code - https://github.com/alexforencich/xgrid/blob/master/firmware/xmega/i2c.cpp
 
- // life saving code - https://github.com/alexforencich/xgrid/blob/master/firmware/xmega/i2c.cpp
- 
 TWI::TWI(TWI_Data * twi_data) {
 	
 	printf("Starting setting up an i2c port..\n");
@@ -46,19 +45,11 @@ TWI::TWI(TWI_Data * twi_data) {
 	//twi_port->MASTER.CTRLB = 
 	//printf("Finished setting up an i2c port\n");
 }
+
 inline register8_t TWI::getBaudVal(int baud){
 	register8_t baudval = (F_CPU / (2 * baud)) - 5;
 	printf("Baud val: %d\n", baudval);
 	return baudval;
-}
-
-void TWI::setDataLength(uint8_t length){
-	twi_data->master_addr = length;
-}
-
-void TWI::begin(register8_t address){
-	// Just enable the TWI for now
-	//this->twi_data->twi_port->MASTER.CTRLA = TWI_MASTER_ENABLE_bm | TWI_MASTER_CMD_;
 }
 
 void TWI::end(){
@@ -131,7 +122,6 @@ void TWI::beginWrite(register8_t address){
 	} else {
 		printf("Error beginning write - TWI bus not ready.");
 	}
-	
 }
 
 void TWI::beginRead(register8_t address){
@@ -167,90 +157,63 @@ void TWI::beginRead(register8_t address){
 
 void TWI::putChar(char c){
 	if(twim_status == TWIM_STATUS_BEGIN_WRITE){
+		twim_status = TWIM_STATUS_BUSY;
 		
+		// send data to port
 		twi_port->MASTER.DATA = (uint8_t)c;
+
+		// tell bus we want to send data
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
+
+		// wait until done
 		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){	}
-			
+
+		twim_status = TWIM_STATUS_BEGIN_WRITE;
 	} else {
-		printf("Error - Not ready to write.");
+		printf("Error - TWI bus not ready to write.");
 	}
 }
 
 char TWI::getChar(){
 	char c = 0;
 	if(twim_status == TWIM_STATUS_BEGIN_READ){
+		twim_status = TWIM_STATUS_BUSY;
 		
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
 		while(!(twi_port->MASTER.STATUS & TWI_MASTER_RIF_bm)){	}
 		c = twi_port->MASTER.DATA;
+
+		twim_status = TWIM_STATUS_BEGIN_READ;
+	} else {
+		printf("Error - TWI bus not ready to read.");
 	}
 	return c;
 }
 
-void TWI::endTransmission(){
-	if(twim_status == TWIM_STATUS_BEGIN_READ || twim_status == TWIM_STATUS_BEGIN_WRITE){
-		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
-		twim_status = TWIM_STATUS_READY;
-	} else {
-		printf("Error - trying to end i2c transmission while bus is busy.");
-	}
-	
-}
-
+// Write a string of data. yet to be tested.
 void TWI::writeData(register8_t address, const char * data, int length){
-	twi_port->MASTER.ADDR = (address << 1) | 0x00;
-	
-	twi_port->MASTER.CTRLC = TWI_MASTER_CMD_REPSTART_gc;
-	for(int i = 0; i < length; i++){
-		twi_port->MASTER.DATA = *(data++);
-		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
-		
-		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){	}
-			checkTWIStatus();
-	}
-	
-	twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
-	
-	
-	/*
-	unsigned int dataSent = 0;
-	unsigned int dataLength = 0;
+	if(twim_status == TWIM_STATUS_BEGIN_WRITE){
+		twim_status = TWIM_STATUS_BUSY;
 
-	TWI_t * port = twi_data->twi_port;
+		twi_port->MASTER.ADDR = (address << 1) | 0x00;
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_REPSTART_gc;
 
-	// set address with start bit
-	//port->MASTER.ADDR = address & ~0x01;
-
-	twi_data->status = TWIM_STATUS_BUSY;
-	twi_data->result = TWIM_RESULT_UNKNOWN;
-
-	dataLength = strlen(data);
-
-	// if too much data, end
-	if(dataLength > twi_data->maxDataLength){
-		port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
-		twi_data->result = TWIM_RESULT_BUFFER_OVERFLOW;
-	} else {
-	// otherwise, send ze datas!
-		while(*(data) && dataSent < twi_data->maxDataLength){
-			if(port->MASTER.STATUS & TWI_MASTER_RXACK_bm){
-				port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
-				twi_data->result = TWIM_RESULT_NACK_RECEIVED;
-				twi_data->status = TWIM_STATUS_READY;
-			} else {
-				port->MASTER.DATA = *(data++);
-				//*(data++);
-				dataSent++;
-			}
+		for(int i = 0; i < length; i++){
+			twi_port->MASTER.DATA = *(data++);
+			twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
+			while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){	}
+				checkTWIStatus();
 		}
-		// Finish and set statuses
-		port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
-		twi_data->result = TWIM_RESULT_OK;
-		twi_data->status = TWIM_STATUS_READY;
-	} */
+		
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
+		twim_status = TWIM_STATUS_BEGIN_WRITE;
+	} else {
+		printf("Error - trying to write data when i2c bus is busy..")
+	}
 }
 
+
+// Read a string of data. Yet to be tested.
 char * TWI::readData(register8_t address){
 	unsigned int dataReceived = 0;
 	TWI_t * port = twi_data->twi_port;
@@ -277,7 +240,7 @@ register8_t * TWI::pollBus(){
 
 	for(address = 0x00; address < 127; address++){
 		
-		// start the TWI transaction (no action required..?)
+		// start the TWI transaction (no action required)
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_NOACT_gc;
 		
 		// ADDR is slave address!
@@ -303,6 +266,16 @@ register8_t * TWI::pollBus(){
 
 	return returnAddresses;
 }
+
+void TWI::endTransmission(){
+	if(twim_status == TWIM_STATUS_BEGIN_READ || twim_status == TWIM_STATUS_BEGIN_WRITE){
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
+		twim_status = TWIM_STATUS_READY;
+	} else {
+		printf("Error - trying to end i2c transmission while bus is busy.");
+	}
+}
+
 
 TWI::~TWI() {
 	// TODO Auto-generated destructor stub
