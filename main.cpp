@@ -150,8 +150,8 @@ int main(){
 		
 	} 
 	printf("Turning on led matrix osc.\n");	
+
 	// turn on oscillator
-	
 	leds.beginWrite(leds_addr);
 	printf("Write begun..");
 	leds.putChar(0x21);

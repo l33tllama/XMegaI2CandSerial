@@ -15,6 +15,15 @@
 
 // life saving code - https://github.com/alexforencich/xgrid/blob/master/firmware/xmega/i2c.cpp
 
+// null constructor
+TWI::TWI(){
+	twi_data = NULL;
+	twi_port = NULL;
+	port = NULL;
+	twim_status = TWIM_STATUS_READY;
+}
+
+// main constructor
 TWI::TWI(TWI_Data * twi_data) {
 	
 	printf("Starting setting up an i2c port..\n");
@@ -106,9 +115,9 @@ void TWI::beginWrite(register8_t address){
 		
 		// Asking for a response
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
-		
+		int timeout = 0;
 		// Wait until this transaction is complete
-		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){	}
+		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){}
 		//printf("a:%3d - s:%2d - d:%2d\n", address << 0, twi_port->MASTER.STATUS, twi_port->MASTER.DATA);
 		
 		// See if we got a RXACK!
@@ -145,6 +154,40 @@ void TWI::beginRead(register8_t address){
 		if((twi_port->MASTER.STATUS & TWI_MASTER_RXACK_bm)){
 			printf("Error! Device not found at address %x\n", address);
 		}
+
+		// End transaction
+		//twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
+		twim_status = TWIM_STATUS_BEGIN_READ;
+	} else {
+		printf("Error beginning read - TWI bus not ready.");
+	}
+
+}
+
+char TWI::beginReadFirstByte(register8_t address){
+	char c;
+	if(twim_status == TWIM_STATUS_READY){
+		// Test if address exists..
+
+		// start the TWI transaction (no action required..?)
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_NOACT_gc;
+
+		// ADDR is slave address!
+		twi_port->MASTER.ADDR = (register8_t) (address << 1) | 0x01;
+
+		// Asking for a response
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
+
+		// Wait until this transaction is complete
+		while(!(twi_port->MASTER.STATUS & TWI_MASTER_RIF_bm)){	}
+		//printf("a:%3d - s:%2d - d:%2d\n", address << 0, twi_port->MASTER.STATUS, twi_port->MASTER.DATA);
+
+		// See if we got a RXACK!
+		if((twi_port->MASTER.STATUS & TWI_MASTER_RXACK_bm)){
+			printf("Error! Device not found at address %x\n", address);
+		}
+
+		c = twi_port->MASTER.DATA;
 		
 		// End transaction
 		//twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
@@ -152,7 +195,11 @@ void TWI::beginRead(register8_t address){
 	} else {
 		printf("Error beginning read - TWI bus not ready.");
 	}
+	return c;
 	
+}
+TWIM_STATUS_t TWI::getTWIMStatus(){
+	return twim_status;
 }
 
 void TWI::putChar(char c){
@@ -166,7 +213,14 @@ void TWI::putChar(char c){
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
 
 		// wait until done
-		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){	}
+		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){
+			uint8_t currentStatus = twi_port->MASTER.STATUS;
+			if ((currentStatus & TWI_MASTER_ARBLOST_bm) ||
+					(currentStatus & TWI_MASTER_BUSERR_bm)) {
+				printf("Error beginning to read..\n");
+				break;
+			}
+		}
 
 		twim_status = TWIM_STATUS_BEGIN_WRITE;
 	} else {
@@ -178,8 +232,7 @@ char TWI::getChar(){
 	char c = 0;
 	if(twim_status == TWIM_STATUS_BEGIN_READ){
 		twim_status = TWIM_STATUS_BUSY;
-		
-		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
+					twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
 		while(!(twi_port->MASTER.STATUS & TWI_MASTER_RIF_bm)){	}
 		c = twi_port->MASTER.DATA;
 
@@ -208,7 +261,7 @@ void TWI::writeData(register8_t address, const char * data, int length){
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
 		twim_status = TWIM_STATUS_BEGIN_WRITE;
 	} else {
-		printf("Error - trying to write data when i2c bus is busy..")
+		printf("Error - trying to write data when i2c bus is busy..");
 	}
 }
 
@@ -248,7 +301,7 @@ register8_t * TWI::pollBus(){
 		
 		// Asking for a response
 		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_RECVTRANS_gc;
-		
+		int timeout = 0;
 		// Wait until this transaction is complete
 		while(!(twi_port->MASTER.STATUS & TWI_MASTER_WIF_bm)){	}
 		//printf("a:%3d - s:%2d - d:%2d\n", address << 0, twi_port->MASTER.STATUS, twi_port->MASTER.DATA);
@@ -261,7 +314,7 @@ register8_t * TWI::pollBus(){
 		}
 		
 		// End transaction
-		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc |  TWI_MASTER_ACKACT_bm;
 	}
 
 	return returnAddresses;
@@ -269,7 +322,7 @@ register8_t * TWI::pollBus(){
 
 void TWI::endTransmission(){
 	if(twim_status == TWIM_STATUS_BEGIN_READ || twim_status == TWIM_STATUS_BEGIN_WRITE){
-		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc;
+		twi_port->MASTER.CTRLC = TWI_MASTER_CMD_STOP_gc | TWI_MASTER_ACKACT_bm;
 		twim_status = TWIM_STATUS_READY;
 	} else {
 		printf("Error - trying to end i2c transmission while bus is busy.");

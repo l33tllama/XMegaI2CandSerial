@@ -8,6 +8,7 @@
 #ifndef TWI_H_
 #define TWI_H_
 #define F_CPU 3200000
+#define TWI_TIMEOUT 1000
 #include <avr/io.h>
 
 /*! Transaction result enumeration. */
@@ -40,17 +41,20 @@ typedef struct TWI_Data_struct{
 
 class TWI {
 private:
-	register8_t getBaudVal(int baud);
 	TWI_Data * twi_data;
 	TWI_t * twi_port;
 	PORT_t * port;
 	TWIM_STATUS_t twim_status;
-	void checkTWIStatus();
 	register8_t returnAddresses[127];
+	void checkTWIStatus();
+	register8_t getBaudVal(int baud);
 public:
+	TWI();
 	TWI(TWI_Data * twi_data);
+	TWIM_STATUS_t getTWIMStatus();
 	void beginWrite(register8_t address);
 	void beginRead(register8_t address);
+	char beginReadFirstByte(register8_t address);
 	void putChar(char c);
 	char getChar();
 	void endTransmission();
